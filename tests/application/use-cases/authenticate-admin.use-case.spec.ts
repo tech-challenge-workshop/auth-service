@@ -11,8 +11,12 @@ describe('AuthenticateAdminUseCase', () => {
 
     const issued = useCase.execute('super-secret-key')
 
-    const payload = jwt.verify(issued.token, 'test-secret') as { sub: string; role: string }
-    expect(payload).toMatchObject({ sub: 'admin', role: 'admin' })
+    const payload = jwt.verify(issued.token, 'test-secret') as {
+      sub: string
+      role: string
+      iss: string
+    }
+    expect(payload).toMatchObject({ sub: 'admin', role: 'admin', iss: 'auth-service' })
     expect(issued.expiresIn).toBe(120)
   })
 

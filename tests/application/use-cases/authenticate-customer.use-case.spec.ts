@@ -28,8 +28,9 @@ describe('AuthenticateCustomerUseCase', () => {
       sub: string
       role: string
       exp: number
+      iss: string
     }
-    expect(payload).toMatchObject({ sub: 'c-1', role: 'customer' })
+    expect(payload).toMatchObject({ sub: 'c-1', role: 'customer', iss: 'auth-service' })
     expect(payload.exp).toBeGreaterThan(Math.floor(Date.now() / 1000))
   })
 
