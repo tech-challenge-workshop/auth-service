@@ -49,6 +49,8 @@ cp .env.example .env       # then edit
 pnpm start:dev             # serverless-offline on :3003
 ```
 
+> **Known issue (2026-07):** `serverless@3.39` + `serverless-offline@13.9` throws `Cannot redefine property: _serverlessExternalPluginName` on boot. The unit tests (30/30) and `pnpm package` work fine; only the local HTTP emulator is affected. Track: https://github.com/serverless/serverless/issues (search the error message). Workaround: hit the handler modules directly with `ts-node` or wait for the upstream fix / migrate to Serverless Framework 4.
+
 Test the endpoints:
 
 ```bash

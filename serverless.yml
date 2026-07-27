@@ -1,5 +1,6 @@
 service: auth-service
 frameworkVersion: '3'
+useDotenv: true
 
 plugins:
   - serverless-esbuild
