@@ -90,26 +90,15 @@ curl -s -X POST http://localhost:3003/auth/admin \
 ## Deployment model
 
 The service runs as a **Lambda** behind API Gateway. Kong keeps `/auth` as the
-public path and proxies to it, so the gateway is still the single entry point.
+public path and proxies to it, so the gateway remains the single entry point.
 
-`src/local-server.ts` exists only for local development: it wraps the same two
+`src/local-server.ts` is for local development only: it wraps the same two
 handlers in a Node `http` server, converting an `IncomingMessage` into an
 `APIGatewayProxyEventV2`. It is what `pnpm start:dev` runs, and what the
-Dockerfile builds for anyone who wants the service in a container. Neither is
-what production uses.
+Dockerfile builds for anyone who wants the service in a container.
 
-That wrapper was once the deployment model, as a workaround for
-`serverless-offline` crashing on boot. Deploying properly proved the workaround
-was hiding real defects — most seriously, the admin handler was synchronous, and
-the Lambda runtime only reads a handler that returns a Promise or calls the
-callback. Its return value was discarded and **every request resolved to HTTP
-200 with a null body, including requests carrying the wrong API key**. The local
-server calls the function directly and reads the return, so nothing local could
-ever have caught it.
-
-`serverless-offline` is no longer a dependency: loading it alongside
-`serverless-esbuild` makes Serverless v3 process the same plugin class twice and
-abort.
+Handlers are `async`, because the Lambda Node runtime reads a handler that
+returns a Promise or one that calls the callback.
 
 `src/local-server.ts` is excluded from coverage: it is an I/O adapter with no
 business logic, and the handlers it calls are fully tested.
@@ -186,9 +175,7 @@ hostname returns 403 from AWS before the function is ever invoked.
 The deploy step skips itself when the role or the signing key is missing, which
 keeps `main` green while no environment exists.
 
-> **`CUSTOMER_LOOKUP_URL` breaks when the cluster is recreated.** The function
-> calls back through the gateway to check that a customer exists, and a new
-> cluster means a new load balancer hostname. `tech-platform`'s
-> `scripts/bootstrap-cluster.sh` redeploys the function with the current address
-> for exactly this reason. The failure is silent: `/auth` simply stops issuing
-> tokens.
+> **`CUSTOMER_LOOKUP_URL` is tied to the gateway address.** The function calls
+> back through Kong to check that a customer exists, so a recreated cluster
+> means a new hostname and a redeploy. `tech-platform`'s
+> `scripts/bootstrap-cluster.sh` handles it.
