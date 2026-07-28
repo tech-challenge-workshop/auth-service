@@ -4,7 +4,10 @@
   "private": true,
   "description": "CPF/CNPJ authentication Lambda that issues JWTs for the tech-challenge microservices",
   "scripts": {
-    "start:dev": "serverless offline start --stage dev",
+    "start:dev": "node --import tsx src/local-server.ts",
+    "start:serverless": "serverless offline start --stage dev",
+    "build": "esbuild src/local-server.ts --bundle --platform=node --target=node22 --outfile=dist/local-server.js",
+    "start": "node dist/local-server.js",
     "package": "serverless package --stage dev",
     "test": "jest",
     "test:cov": "jest --coverage",
@@ -34,6 +37,7 @@
     "serverless-esbuild": "1.54.6",
     "serverless-offline": "13.9.0",
     "ts-jest": "29.2.5",
+    "tsx": "4.19.1",
     "typescript": "5.6.3"
   },
   "packageManager": "pnpm@10.32.1"
