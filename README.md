@@ -123,7 +123,17 @@ Same Clean Architecture layering as the other services:
 
 ## Deployment
 
-Kubernetes manifests (`Deployment`, `Service`, `ConfigMap`, `HPA`) live in [`tech-platform/k8s/auth-service`](https://github.com/tech-challenge-workshop/tech-platform/tree/main/k8s/auth-service). Because the service is stateless and holds no database, it runs with the smallest resource footprint of the four.
+Kubernetes manifests (`Deployment`, `Service`, `ConfigMap`, `Secret`, `HPA`) live in [`tech-platform/k8s/auth-service`](https://github.com/tech-challenge-workshop/tech-platform/tree/main/k8s/auth-service). Because the service is stateless and holds no database, it runs with the smallest resource footprint of the four.
+
+**Why the manifests are not in this repository.** The four services are always
+deployed to the same cluster, behind the same Kong gateway, by the same
+pipeline. Keeping a `k8s/` directory per repository would duplicate the
+namespace, the `Gateway`, the `HTTPRoute` set, the Kong plugins and the Datadog
+values four times over, and those copies would drift the first time a route
+changed. Centralising them keeps one kustomize tree that renders the whole
+platform and is validated by `kubeconform` on every pull request. The trade-off
+is deliberate: this repository owns its application and its image, the platform
+repository owns how the platform is assembled.
 
 CI builds and pushes the image to `ghcr.io/tech-challenge-workshop/auth-service` on every push to `main`.
 
