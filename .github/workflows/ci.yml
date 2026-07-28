@@ -67,20 +67,36 @@ jobs:
     env:
       AWS_DEPLOY_ROLE_ARN: ${{ secrets.AWS_DEPLOY_ROLE_ARN }}
       AWS_REGION: ${{ vars.AWS_REGION || 'us-east-1' }}
-      EKS_CLUSTER_NAME: ${{ vars.EKS_CLUSTER_NAME || 'tech-challenge-dev-eks' }}
-      NAMESPACE: tech-challenge
+      JWT_SECRET: ${{ secrets.JWT_SECRET }}
+      ADMIN_API_KEY: ${{ secrets.ADMIN_API_KEY }}
+      CUSTOMER_LOOKUP_URL: ${{ vars.CUSTOMER_LOOKUP_URL }}
     steps:
-      # The cluster is created and destroyed around demos, so a missing role
-      # means "no cluster right now", not a failure. Skipping keeps main green.
-      - name: Check whether a cluster is configured
+      # This service is a Lambda, not a workload in the cluster, so it deploys
+      # with Serverless rather than kubectl. Skipping when unconfigured keeps
+      # main green while no environment exists.
+      - name: Check whether a target is configured
         id: guard
         run: |
-          if [ -z "$AWS_DEPLOY_ROLE_ARN" ]; then
-            echo "AWS_DEPLOY_ROLE_ARN is not set — skipping deploy."
+          if [ -z "$AWS_DEPLOY_ROLE_ARN" ] || [ -z "$JWT_SECRET" ]; then
+            echo "deploy target is not configured — skipping."
             echo "enabled=false" >> "$GITHUB_OUTPUT"
           else
             echo "enabled=true" >> "$GITHUB_OUTPUT"
           fi
+
+      - uses: actions/checkout@v4
+        if: steps.guard.outputs.enabled == 'true'
+      - uses: pnpm/action-setup@v4
+        if: steps.guard.outputs.enabled == 'true'
+        with:
+          version: 10.32.1
+      - uses: actions/setup-node@v4
+        if: steps.guard.outputs.enabled == 'true'
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+        if: steps.guard.outputs.enabled == 'true'
 
       - uses: aws-actions/configure-aws-credentials@v4
         if: steps.guard.outputs.enabled == 'true'
@@ -88,17 +104,6 @@ jobs:
           role-to-assume: ${{ env.AWS_DEPLOY_ROLE_ARN }}
           aws-region: ${{ env.AWS_REGION }}
 
-      - name: Build the kubeconfig
+      - name: Deploy the function
         if: steps.guard.outputs.enabled == 'true'
-        run: aws eks update-kubeconfig --name "$EKS_CLUSTER_NAME" --region "$AWS_REGION"
-
-      - name: Roll out the image built by this run
-        if: steps.guard.outputs.enabled == 'true'
-        run: |
-          set -euo pipefail
-          TAG="${GITHUB_SHA::7}"
-          kubectl -n "$NAMESPACE" set image deployment/auth-service \
-            app="ghcr.io/tech-challenge-workshop/auth-service:${TAG}"
-          # Fails the job if the new pods never become ready, so a broken image
-          # surfaces here instead of silently staying in ImagePullBackOff.
-          kubectl -n "$NAMESPACE" rollout status deployment/auth-service --timeout=5m
+        run: pnpm exec serverless deploy --stage dev
