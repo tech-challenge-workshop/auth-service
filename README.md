@@ -87,28 +87,45 @@ curl -s -X POST http://localhost:3003/auth/admin \
   -H 'X-Api-Key: change-me'
 ```
 
-## Why this runs as a container, not `serverless offline`
+## Deployment model
 
-The service was built Lambda-first and the handlers are still plain `APIGatewayProxyEventV2` functions. But `serverless@3.39` + `serverless-offline@13.9` throws `Cannot redefine property: _serverlessExternalPluginName` on boot under Node 22, and neither pinning `serverless-esbuild`, downgrading `serverless-offline`, nor dropping the esbuild plugin fixed it.
+The service runs as a **Lambda** behind API Gateway. Kong keeps `/auth` as the
+public path and proxies to it, so the gateway is still the single entry point.
 
-Rather than block on an upstream bug, `src/local-server.ts` wraps the same two handlers in a ~100-line Node `http` server: it converts an `IncomingMessage` into an `APIGatewayProxyEventV2`, calls the handler, and writes the structured result back. The handlers are untouched and stay deployable to Lambda.
+`src/local-server.ts` exists only for local development: it wraps the same two
+handlers in a Node `http` server, converting an `IncomingMessage` into an
+`APIGatewayProxyEventV2`. It is what `pnpm start:dev` runs, and what the
+Dockerfile builds for anyone who wants the service in a container. Neither is
+what production uses.
 
-That wrapper is also what the `Dockerfile` builds, which is why the service ships as a normal container alongside the other three — one deployment model, one set of Kubernetes manifests, no `aws-lambda` Kong plugin needed. `serverless.yml` and `pnpm package` are kept so a real Lambda deploy remains one command away.
+That wrapper was once the deployment model, as a workaround for
+`serverless-offline` crashing on boot. Deploying properly proved the workaround
+was hiding real defects — most seriously, the admin handler was synchronous, and
+the Lambda runtime only reads a handler that returns a Promise or calls the
+callback. Its return value was discarded and **every request resolved to HTTP
+200 with a null body, including requests carrying the wrong API key**. The local
+server calls the function directly and reads the return, so nothing local could
+ever have caught it.
 
-`src/local-server.ts` is excluded from coverage: it is an I/O adapter with no business logic, and the handlers it calls are fully tested.
+`serverless-offline` is no longer a dependency: loading it alongside
+`serverless-esbuild` makes Serverless v3 process the same plugin class twice and
+abort.
+
+`src/local-server.ts` is excluded from coverage: it is an I/O adapter with no
+business logic, and the handlers it calls are fully tested.
 
 ## Scripts
 
 | Script | Purpose |
 |---|---|
 | `pnpm start:dev` | HTTP server on port 3003 via `tsx` (watch-free, restarts are instant). |
-| `pnpm build` | esbuild bundle of the HTTP server into `dist/local-server.js` (~262 KB). |
-| `pnpm start` | Run the built bundle — what the container image executes. |
+| `pnpm build` | esbuild bundle of the local HTTP server into `dist/local-server.js`. |
+| `pnpm start` | Run the built bundle — local and container use only. |
 | `pnpm test` / `pnpm test:cov` / `pnpm test:ci` | Jest unit tests; `test:ci` enforces the 80% coverage gate. |
 | `pnpm lint:check` / `pnpm lint` | ESLint (check / fix). |
 | `pnpm format:check` / `pnpm format` | Prettier (check / write). |
 | `pnpm package` | `serverless package` — produces the deployable Lambda zip. |
-| `pnpm start:serverless` | `serverless offline` (currently broken upstream, see above). |
+| `pnpm exec serverless deploy --stage dev` | Deploy the function. CI does this on every push to `main`. |
 
 ## Architecture
 
@@ -118,7 +135,7 @@ Same Clean Architecture layering as the other services:
 - `application/` — use cases + ports; no framework code.
 - `infra/` — port implementations (HTTP customer lookup gateway).
 - `handlers/` — thin Lambda adapters that wire dependencies and translate HTTP.
-- `local-server.ts` — Node `http` adapter over the same handlers.
+- `local-server.ts` — Node `http` adapter over the same handlers, for local runs only.
 - `shared/` — env parsing, HTTP helpers.
 
 30 tests, 94.7% statements / 92.1% branches.
@@ -144,25 +161,34 @@ covered.
 
 ## Deployment
 
-Kubernetes manifests (`Deployment`, `Service`, `ConfigMap`, `Secret`, `HPA`) live in [`tech-platform/k8s/auth-service`](https://github.com/tech-challenge-workshop/tech-platform/tree/main/k8s/auth-service). Because the service is stateless and holds no database, it runs with the smallest resource footprint of the four.
+Deployed by CI on every push to `main`: the workflow assumes an AWS role through
+OIDC — no stored access key — and runs `serverless deploy`.
 
-**Why the manifests are not in this repository.** The four services are always
-deployed to the same cluster, behind the same Kong gateway, by the same
-pipeline. Keeping a `k8s/` directory per repository would duplicate the
-namespace, the `Gateway`, the `HTTPRoute` set, the Kong plugins and the Datadog
-values four times over, and those copies would drift the first time a route
-changed. Centralising them keeps one kustomize tree that renders the whole
-platform and is validated by `kubeconform` on every pull request. The trade-off
-is deliberate: this repository owns its application and its image, the platform
-repository owns how the platform is assembled.
+There is no Kubernetes Deployment for this service. What lives in
+[`tech-platform/k8s/auth-service`](https://github.com/tech-challenge-workshop/tech-platform/tree/main/k8s/auth-service)
+is a single `ExternalName` service pointing at the API Gateway endpoint, which
+is how Kong keeps `/auth` on the same gateway as everything else.
 
-CI builds and pushes the image to `ghcr.io/tech-challenge-workshop/auth-service` on every push to `main`.
+That route has `konghq.com/preserve-host: "false"`. API Gateway rejects any Host
+that is not its own `execute-api` domain, so forwarding the load balancer's
+hostname returns 403 from AWS before the function is ever invoked.
 
-```bash
-docker build -t auth-service .
-docker run --env-file .env -p 3003:3003 auth-service
-```
+### Configuration the pipeline needs
 
-## Contributing
+| Name | Kind | Purpose |
+| --- | --- | --- |
+| `AWS_DEPLOY_ROLE_ARN` | secret | role assumed through OIDC |
+| `JWT_SECRET` | secret | must match the three validating services |
+| `ADMIN_API_KEY` | secret | authorizes `POST /auth/admin` |
+| `CUSTOMER_LOOKUP_URL` | variable | gateway address of `/customers/lookup` |
+| `AWS_REGION` | variable | defaults to `us-east-1` |
 
-`main` is protected: changes land through pull requests with code owner review. All code, comments and commit messages are written in English. Tests live in `tests/`, mirroring the `src/` structure.
+The deploy step skips itself when the role or the signing key is missing, which
+keeps `main` green while no environment exists.
+
+> **`CUSTOMER_LOOKUP_URL` breaks when the cluster is recreated.** The function
+> calls back through the gateway to check that a customer exists, and a new
+> cluster means a new load balancer hostname. `tech-platform`'s
+> `scripts/bootstrap-cluster.sh` redeploys the function with the current address
+> for exactly this reason. The failure is silent: `/auth` simply stops issuing
+> tokens.
