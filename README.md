@@ -1,5 +1,7 @@
 # auth-service
 
+[![ci](https://github.com/tech-challenge-workshop/auth-service/actions/workflows/ci.yml/badge.svg)](https://github.com/tech-challenge-workshop/auth-service/actions/workflows/ci.yml)
+
 Stateless authentication service for the Tech Challenge (Phase 4). Issues HS256 JWTs that are validated by `work-order-service`, `execution-service` and `billing-service`. It never stores users or passwords.
 
 One of four independent services:
@@ -120,6 +122,25 @@ Same Clean Architecture layering as the other services:
 - `shared/` — env parsing, HTTP helpers.
 
 30 tests, 94.7% statements / 92.1% branches.
+
+## Test coverage
+
+`pnpm test:ci` **fails the build below 80%** on statements, branches, functions
+and lines — the threshold lives in [`tests/jest-cov.json`](tests/jest-cov.json).
+Current run: **30 tests, 94.7% statements / 92.1% branches**.
+
+```bash
+pnpm test:ci
+```
+
+There is no SonarCloud project for this repository on purpose. The requirements
+scope code-quality analysis to the *microservices*, and the challenge classifies
+the serverless authentication function as an edge component rather than one of
+the three. The 80% gate still applies here.
+
+`src/local-server.ts` is excluded from coverage: it is an I/O adapter that
+translates HTTP into the Lambda event shape, and the handlers it calls are fully
+covered.
 
 ## Deployment
 
