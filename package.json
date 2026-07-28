@@ -4,7 +4,7 @@
   "private": true,
   "description": "CPF/CNPJ authentication Lambda that issues JWTs for the tech-challenge microservices",
   "scripts": {
-    "start:dev": "node --import tsx src/local-server.ts",
+    "start:dev": "node --env-file-if-exists=.env --import tsx src/local-server.ts",
     "start:serverless": "serverless offline start --stage dev",
     "build": "esbuild src/local-server.ts --bundle --platform=node --target=node22 --outfile=dist/local-server.js",
     "start": "node dist/local-server.js",
