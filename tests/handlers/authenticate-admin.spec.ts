@@ -1,6 +1,6 @@
 import { APIGatewayProxyEventV2 } from 'aws-lambda'
 import jwt from 'jsonwebtoken'
-import { execute } from '../../src/handlers/authenticate-admin.handler'
+import { execute } from '../../src/handlers/authenticate-admin'
 import { AuthenticateAdminUseCase } from '../../src/application/use-cases/authenticate-admin.use-case'
 import { JwtIssuer } from '../../src/application/services/jwt-issuer'
 

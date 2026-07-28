@@ -5,7 +5,13 @@ import { JwtIssuer } from '../application/services/jwt-issuer'
 import { loadEnv } from '../shared/env'
 import { json } from '../shared/http-response'
 
-export function handler(event: APIGatewayProxyEventV2): APIGatewayProxyStructuredResultV2 {
+// Async on purpose, even though nothing here awaits. The Lambda Node runtime
+// only supports handlers that return a Promise or call the callback: a
+// synchronous handler returning a value is never read, and the invocation
+// resolves to null with no error at all.
+export async function handler(
+  event: APIGatewayProxyEventV2,
+): Promise<APIGatewayProxyStructuredResultV2> {
   const env = loadEnv()
   const useCase = new AuthenticateAdminUseCase(
     env.ADMIN_API_KEY,

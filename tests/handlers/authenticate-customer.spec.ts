@@ -1,6 +1,6 @@
 import { APIGatewayProxyEventV2 } from 'aws-lambda'
 import jwt from 'jsonwebtoken'
-import { execute } from '../../src/handlers/authenticate-customer.handler'
+import { execute } from '../../src/handlers/authenticate-customer'
 import { AuthenticateCustomerUseCase } from '../../src/application/use-cases/authenticate-customer.use-case'
 import { JwtIssuer } from '../../src/application/services/jwt-issuer'
 import {

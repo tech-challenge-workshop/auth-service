@@ -3,8 +3,11 @@ frameworkVersion: '3'
 useDotenv: true
 
 plugins:
+  # serverless-offline is intentionally absent: local development runs through
+  # src/local-server.ts, and loading both plugins makes Serverless v3 process
+  # the same plugin class twice and die with "Cannot redefine property:
+  # _serverlessExternalPluginName".
   - serverless-esbuild
-  - serverless-offline
 
 provider:
   name: aws
@@ -30,9 +33,6 @@ custom:
     platform: node
     exclude:
       - aws-sdk
-  serverless-offline:
-    httpPort: 3003
-    lambdaPort: 3013
 
 functions:
   authenticateCustomer:

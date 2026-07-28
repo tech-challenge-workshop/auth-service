@@ -7,8 +7,8 @@
 
 import { createServer, IncomingHttpHeaders, IncomingMessage, ServerResponse } from 'node:http'
 import type { APIGatewayProxyEventV2, APIGatewayProxyStructuredResultV2 } from 'aws-lambda'
-import { handler as authenticateAdmin } from './handlers/authenticate-admin.handler'
-import { handler as authenticateCustomer } from './handlers/authenticate-customer.handler'
+import { handler as authenticateAdmin } from './handlers/authenticate-admin'
+import { handler as authenticateCustomer } from './handlers/authenticate-customer'
 import { loadEnv } from './shared/env'
 
 type LambdaHandler = (
